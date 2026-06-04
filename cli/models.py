@@ -1,0 +1,152 @@
+"""数据模型定义"""
+
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from enum import Enum
+from typing import Optional
+import uuid
+
+
+class EntrySource(Enum):
+    """日报条目来源"""
+    GIT_COMMIT = "git_commit"   # 自动从 Git 提交解析
+    MANUAL = "manual"           # 用户手动添加
+
+
+@dataclass
+class DailyEntry:
+    """日报中的单条工作记录"""
+    content: str                            # 条目描述
+    source: EntrySource                     # 来源
+    repo_name: str = "manual"               # 所属仓库名
+    branch: Optional[str] = None            # 分支名
+    commit_hash: Optional[str] = None       # Git commit hash (仅 Git 条目)
+    id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    order: int = 0                          # 排序序号
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "content": self.content,
+            "source": self.source.value,
+            "repo_name": self.repo_name,
+            "branch": self.branch,
+            "commit_hash": self.commit_hash,
+            "created_at": self.created_at,
+            "order": self.order,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "DailyEntry":
+        return cls(
+            id=d.get("id", ""),
+            content=d["content"],
+            source=EntrySource(d["source"]),
+            repo_name=d.get("repo_name", "manual"),
+            branch=d.get("branch"),
+            commit_hash=d.get("commit_hash"),
+            created_at=d.get("created_at", ""),
+            order=d.get("order", 0),
+        )
+
+
+@dataclass
+class CommitInfo:
+    """Git 提交信息 (从 git log 解析)"""
+    hash: str
+    message: str
+    author: str
+    timestamp: datetime
+    repo_name: str
+    branch: str = ""
+    files_changed: int = 0
+
+    def to_daily_entry(self) -> DailyEntry:
+        """将 Git 提交转换为日报条目"""
+        return DailyEntry(
+            content=self.message.strip(),
+            source=EntrySource.GIT_COMMIT,
+            repo_name=self.repo_name,
+            branch=self.branch,
+            commit_hash=self.hash,
+        )
+
+
+@dataclass
+class DailyReport:
+    """单天日报"""
+    date: str                           # "2026-06-04"
+    day_of_week: str                    # "星期四"
+    entries: list[DailyEntry] = field(default_factory=list)
+    extra_notes: str = ""               # 额外备注
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
+
+    def to_dict(self) -> dict:
+        return {
+            "date": self.date,
+            "day_of_week": self.day_of_week,
+            "entries": [e.to_dict() for e in self.entries],
+            "extra_notes": self.extra_notes,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "DailyReport":
+        return cls(
+            date=d["date"],
+            day_of_week=d.get("day_of_week", ""),
+            entries=[DailyEntry.from_dict(e) for e in d.get("entries", [])],
+            extra_notes=d.get("extra_notes", ""),
+            created_at=d.get("created_at", ""),
+            updated_at=d.get("updated_at", ""),
+        )
+
+
+@dataclass
+class Config:
+    """全局配置"""
+    git_author: str = ""
+    git_author_email: str = ""
+    scan_repos: list[str] = field(default_factory=list)
+    report_language: str = "zh"
+    daily_template: str = "daily.md.j2"
+    weekly_template: str = "weekly.md.j2"
+    include_branches: list[str] = field(default_factory=lambda: ["*"])
+    exclude_branches: list[str] = field(default_factory=list)
+    exclude_patterns: list[str] = field(default_factory=lambda: [
+        r"^(Merge|chore|WIP)",
+        r"auto-commit",
+    ])
+
+    def to_dict(self) -> dict:
+        return {
+            "git_author": self.git_author,
+            "git_author_email": self.git_author_email,
+            "scan_repos": self.scan_repos,
+            "report_language": self.report_language,
+            "daily_template": self.daily_template,
+            "weekly_template": self.weekly_template,
+            "include_branches": self.include_branches,
+            "exclude_branches": self.exclude_branches,
+            "exclude_patterns": self.exclude_patterns,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Config":
+        return cls(
+            git_author=d.get("git_author", ""),
+            git_author_email=d.get("git_author_email", ""),
+            scan_repos=d.get("scan_repos", []),
+            report_language=d.get("report_language", "zh"),
+            daily_template=d.get("daily_template", "daily.md.j2"),
+            weekly_template=d.get("weekly_template", "weekly.md.j2"),
+            include_branches=d.get("include_branches", ["*"]),
+            exclude_branches=d.get("exclude_branches", []),
+            exclude_patterns=d.get("exclude_patterns", [
+                r"^(Merge|chore|WIP)",
+                r"auto-commit",
+            ]),
+        )

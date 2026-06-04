@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "daily-report"
+version = "0.1.0"
+description = "基于 Git 提交记录自动生成工作日报/周报的 CLI 工具"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "kaixuancao"}
+]
+dependencies = [
+    "click>=8.0",
+    "GitPython>=3.1",
+    "Jinja2>=3.0",
+    "python-dateutil>=2.8",
+    "pyperclip>=1.8",
+]
+
+[project.scripts]
+daily-report = "cli.main:cli"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-mock>=3.10",
+]
+
+[tool.setuptools.packages.find]
+include = ["cli*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

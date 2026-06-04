@@ -1,0 +1,32 @@
+{# 周报模板 #}
+# 周报 ({{ week_start }} ~ {{ week_end }})
+
+## 本周工作概要
+- 总提交数：{{ stats.total_commits }}
+- 涉及仓库：{{ stats.repo_count }} 个
+- 手动记录：{{ stats.manual_count }} 条
+
+{% if summary %}
+{{ summary }}
+{% endif %}
+
+## 每日工作详情
+
+{% for report in daily_reports %}
+### {{ report.date }} {{ report.day_of_week }}
+{% for entry in report.entries %}
+- {{ entry.content }}{% if entry.repo_name and entry.repo_name != "manual" %} [{{ entry.repo_name }}]{% endif %}
+{% endfor %}
+{% if report.extra_notes %}
+> 备注：{{ report.extra_notes }}
+{% endif %}
+
+{% endfor %}
+
+{% if next_week_plan %}
+## 下周计划
+{{ next_week_plan }}
+{% else %}
+## 下周计划
+待补充
+{% endif %}

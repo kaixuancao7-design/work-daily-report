@@ -1,0 +1,23 @@
+{# 日报模板 #}
+# {{ date }} {{ day_of_week }} 工作日报
+
+## 今日完成
+
+{% for repo_name, entries in grouped_entries.items() %}
+### {{ repo_name }}
+{% for entry in entries %}
+- {{ entry.content }}{% if entry.branch %} ({{ entry.branch }}){% endif %}
+{% endfor %}
+{% endfor %}
+
+{% if manual_entries %}
+### 其他工作
+{% for entry in manual_entries %}
+- {{ entry.content }}
+{% endfor %}
+{% endif %}
+
+{% if extra_notes %}
+## 备注
+{{ extra_notes }}
+{% endif %}
