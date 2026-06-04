@@ -11,7 +11,9 @@
 - **LLM 智能总结**: 可选调用 AI 对本周工作进行自然语言概括
 - **多模板导出**: 内置默认 / 飞书 / 钉钉模板，支持自定义模板目录
 - **Webhook 推送**: 支持飞书、钉钉机器人 Webhook 一键推送
-- **VSCode 扩展**: 命令面板、状态栏、侧边栏、Webview 预览等编辑器内体验
+- **历史日报浏览**: 侧边栏按 年→月→日 展示全部日报，点击查看历史报告
+- **定时自动总结**: 支持断点追赶，关机/关闭后下次启动自动补全缺失日报/周报
+- **VSCode 扩展**: 命令面板、状态栏、多视图侧边栏、Webview 预览等编辑器内体验
 
 ## 安装
 
@@ -127,6 +129,9 @@ daily-report config --add-repo /path/to/repo   # 添加扫描仓库
 daily-report vscode --today              # 输出今日日报 Markdown
 daily-report vscode --today --json       # 输出 JSON（供扩展消费）
 daily-report vscode --week               # 输出周报 Markdown
+daily-report vscode --history-tree       # 输出全部日报 年→月→日 层级 JSON
+daily-report vscode --report 2026-06-04  # 输出指定日期 Markdown
+daily-report vscode --catchup            # 执行断点追赶，补全缺失日报/周报
 ```
 
 ## 配置
@@ -151,7 +156,13 @@ daily-report vscode --week               # 输出周报 Markdown
   "llm_api_base": "",
   "llm_model": "claude-sonnet-4-6",
   "export_webhook_url": "",
-  "export_format": "markdown"
+  "export_format": "markdown",
+  "schedule_enabled": true,
+  "schedule_daily_time": "18:00",
+  "schedule_weekly_day": 5,
+  "schedule_weekly_time": "18:30",
+  "schedule_auto_save": true,
+  "schedule_auto_summary": false
 }
 ```
 
@@ -167,6 +178,19 @@ export LLM_MODEL=claude-sonnet-4-6
 # 或写入配置文件
 daily-report config  # 手动编辑 data/config.json
 ```
+
+### 定时调度配置
+
+| 字段 | 默认值 | 说明 |
+|------|--------|------|
+| `schedule_enabled` | `true` | 是否启用自动定时总结 |
+| `schedule_daily_time` | `"18:00"` | 每日自动生成日报的时间 |
+| `schedule_weekly_day` | `5` | 周报生成日（5=周五） |
+| `schedule_weekly_time` | `"18:30"` | 周报生成时间 |
+| `schedule_auto_save` | `true` | 是否自动保存到 JSON 存储 |
+| `schedule_auto_summary` | `false` | 周报是否自动启用 LLM 总结 |
+
+**断点追赶机制**：VSCode 扩展每次激活时自动检查「上次运行日期」到「今天」之间是否有缺失的日报/周报，如有则自动补全。运行期间每 30 分钟检查一次。调度状态保存在 `data/.schedule_state.json` 中。
 
 ## 模板
 
@@ -188,11 +212,13 @@ daily-report config --set custom_template_dir templates/custom
 ```
 data/
 ├── config.json
+├── .schedule_state.json          # 定时调度状态
 └── daily-reports/
     └── 2026/
         └── 06/
             ├── 2026-06-04.json
-            └── 2026-06-05.json
+            ├── 2026-06-05.json
+            └── weekly-2026-06-01.md
 ```
 
 ## VSCode 扩展
@@ -215,12 +241,17 @@ code --install-extension vscode-extension/daily-report-0.1.0.vsix
 | `日报: 预览今日日报` | Webview 面板预览 |
 | `日报: 添加手动工作条目` | 快速添加条目 |
 | `日报: 导出日报` | 按格式导出 |
-| `日报: 刷新今日条目` | 刷新侧边栏 |
+| `日报: 查看历史日报` | 点击侧边栏日期 → Webview 查看历史报告 |
+| `日报: 刷新今日条目` | 刷新"今日工作"侧边栏 |
+| `日报: 刷新历史日报列表` | 刷新"历史日报"侧边栏 |
+| `日报: 立即检查并补全缺失日报` | 手动触发断点追赶 |
 
 ### UI
 
 - **状态栏**：右下角 `📋 日报` 按钮
-- **侧边栏**：活动栏「工作日报」→「今日工作」面板
+- **侧边栏**：活动栏「工作日报」包含两个面板
+  - **今日工作**：显示今日 Git 提交和手动条目
+  - **历史日报**：按 📅 年 → 📁 月 → 📄 日 层级展示全部日报，点击在 Webview 中查看
 - **预览**：Webview 渲染日报 Markdown
 
 ### 配置项
@@ -231,6 +262,8 @@ code --install-extension vscode-extension/daily-report-0.1.0.vsix
 | `dailyReport.dataDir` | 空 | 数据目录（空=工作区 data/） |
 | `dailyReport.outputTarget` | `outputChannel` | 输出目标 |
 | `dailyReport.templateFormat` | `default` | 模板格式 |
+| `dailyReport.autoCatchup` | `true` | 启动时自动检查并补全缺失日报/周报 |
+| `dailyReport.catchupDays` | `7` | 自动补全回溯的最大天数 |
 
 ## 项目结构
 
@@ -245,6 +278,7 @@ work-daily-report/
 │   ├── report_generator.py      # Jinja2 模板渲染
 │   ├── llm_summary.py           # LLM API 调用
 │   ├── export.py                # 导出 & Webhook 推送
+│   ├── scheduler.py             # 定时调度 & 断点追赶
 │   └── main.py                  # Click CLI 入口
 ├── templates/                   # Jinja2 报告模板
 │   ├── daily.md.j2
@@ -256,7 +290,7 @@ work-daily-report/
 │   ├── src/extension.ts
 │   ├── out/extension.js
 │   └── daily-report-0.1.0.vsix
-├── tests/                       # 40 个单元测试
+├── tests/                       # 47 个单元测试
 ├── data/                        # 本地数据（gitignore）
 ├── pyproject.toml
 ├── requirements.txt
@@ -280,9 +314,11 @@ npm run package      # 打包 .vsix
 ## 路线图
 
 - [x] Python CLI 核心（日报、周报、JSON 存储）
-- [x] 多仓库自动发现
+- [x] 多仓库自动发现 + 性能优化
 - [x] LLM 智能总结（Anthropic / OpenAI）
 - [x] 模板自定义 + 飞书/钉钉模板
 - [x] 数据导出 + Webhook 推送
-- [x] VSCode 扩展（命令面板、状态栏、侧边栏）
+- [x] VSCode 扩展（命令面板、状态栏、多视图侧边栏）
 - [x] VSIX 打包
+- [x] 历史日报浏览（侧边栏 年→月→日 层级树）
+- [x] 定时自动总结 + 断点追赶
