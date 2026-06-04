@@ -1,19 +1,35 @@
 # work-daily-report
 
-基于 Git 提交记录自动生成工作日报 / 周报的 CLI 工具，附带 VSCode 扩展。
+**基于 Git 提交记录自动生成工作日报 / 周报的 CLI 工具 + VSCode 扩展。**
+
+> 每天下班前对着屏幕回忆今天干了什么？写周报时翻遍 git log 拼凑本周内容？这个工具帮你省掉这些重复劳动。
+>
+> 解析本地 Git 仓库 commit 记录，自动填入「今日完成」，动手补充非代码工作，30 秒生成日报、1 分钟生成周报。
 
 ## 功能
 
-- **自动生成日报**: 解析本地 Git 仓库的 commit 记录，自动填充「今日完成」
-- **多仓库自动发现**: 自动扫描工作区下所有 Git 仓库（3 层深度），无需手动配置
-- **手动补充**: 交互式添加非代码类工作条目（会议、文档、沟通等）
-- **周报汇总**: 汇总一周日报，按 commit hash 去重 + 同主题合并
-- **LLM 智能总结**: 可选调用 AI 对本周工作进行自然语言概括
-- **多模板导出**: 内置默认 / 飞书 / 钉钉模板，支持自定义模板目录
-- **Webhook 推送**: 支持飞书、钉钉机器人 Webhook 一键推送
-- **历史日报浏览**: 侧边栏按 年→月→日 展示全部日报，点击查看历史报告
-- **定时自动总结**: 支持断点追赶，关机/关闭后下次启动自动补全缺失日报/周报
-- **VSCode 扩展**: 命令面板、状态栏、多视图侧边栏、Webview 预览等编辑器内体验
+| 能力 | 说明 |
+|------|------|
+| 📦 **Git 自动填充** | 扫描本地仓库，自动提取今天所有 commit 作为工作条目 |
+| 🔍 **多仓库发现** | 自动检测工作区下所有 Git 仓库（3 层深度），无需手动配置 |
+| ✍️ **手动补充** | 交互式添加会议、文档、沟通等非代码条目 |
+| 📋 **周报汇总** | 合并一周日报，按 commit hash 去重 + 同主题归并 |
+| 🤖 **LLM 智能总结** | 调用 AI（Anthropic / OpenAI）对本周工作进行自然语言概括 |
+| 📄 **多平台模板** | 内置通用 Markdown、飞书、钉钉四套模板，支持自定义 |
+| 🔗 **Webhook 推送** | 一键推送日报/周报到飞书或钉钉群聊 |
+| 🖥️ **VSCode 深度集成** | 命令面板、状态栏按钮、多视图侧边栏、Webview 预览 |
+| 📅 **历史日报浏览** | 侧边栏按 年→月→日 层级展示全部历史日报，点击即看 |
+| ⏰ **定时自动总结** | 设定每日/每周自动触发，关机错过自动补全（断点追赶） |
+
+### 解决了什么问题
+
+| 痛点 | 方案 |
+|------|------|
+| 下班前忘记今天做了什么 | 自动从 Git 提取当日 commit |
+| 非代码工作（会议、文档）无法追溯 | 交互式补充，统一存入日报 |
+| 写周报时逐天凑内容 | 自动合并一周日报 + AI 总结 |
+| 团队要日报还得手动发群 | 导出 + Webhook 推送到飞书/钉钉 |
+| VSCode 与外部分工割裂 | 扩展内一键生成、预览、插入 |
 
 ## 安装
 
@@ -22,7 +38,7 @@
 pip install -e .
 
 # VSCode 扩展
-code --install-extension vscode-extension/daily-report-0.1.0.vsix
+code --install-extension vscode-extension/daily-report-0.2.0.vsix
 ```
 
 依赖：Python 3.10+, click, GitPython, Jinja2, python-dateutil, pyperclip
@@ -226,7 +242,7 @@ data/
 ### 安装
 
 ```bash
-code --install-extension vscode-extension/daily-report-0.1.0.vsix
+code --install-extension vscode-extension/daily-report-0.2.0.vsix
 ```
 
 或在 VSCode 中：`Ctrl+Shift+P` → `Extensions: Install from VSIX`
@@ -289,7 +305,7 @@ work-daily-report/
 │   ├── package.json
 │   ├── src/extension.ts
 │   ├── out/extension.js
-│   └── daily-report-0.1.0.vsix
+│   └── daily-report-0.2.0.vsix
 ├── tests/                       # 47 个单元测试
 ├── data/                        # 本地数据（gitignore）
 ├── pyproject.toml
