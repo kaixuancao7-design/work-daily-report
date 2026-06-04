@@ -47,7 +47,7 @@ class GitParser:
         try:
             result = subprocess.run(
                 ["git", "rev-parse", "--git-dir"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, text=True, encoding="utf-8", timeout=5,
                 cwd=str(path),
             )
             return result.returncode == 0
@@ -79,7 +79,7 @@ class GitParser:
         try:
             result = subprocess.run(
                 cmd,
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, encoding="utf-8", timeout=10,
                 cwd=str(self.repo_path),
             )
             if result.returncode != 0:

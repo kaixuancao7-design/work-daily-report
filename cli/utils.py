@@ -57,7 +57,7 @@ def get_default_author() -> str:
     try:
         result = subprocess.run(
             ["git", "config", "user.name"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, encoding="utf-8", timeout=5
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
@@ -72,7 +72,7 @@ def get_default_author_email() -> str:
     try:
         result = subprocess.run(
             ["git", "config", "user.email"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, encoding="utf-8", timeout=5
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()

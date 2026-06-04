@@ -98,12 +98,10 @@ async function runPythonCli(
   const pythonCmd = config.pythonCommand;
 
   return new Promise((resolve, reject) => {
-    // 不使用 shell: true，避免 Windows 上额外启动 cmd.exe 的开销
     const proc = spawn(pythonCmd, args, {
       cwd,
-      shell: false,
+      shell: true,
       stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,  // 隐藏控制台窗口闪烁
     });
 
     let stdout = "";
@@ -398,6 +396,8 @@ async function handleGenerateToday() {
         const content = await runPythonCli(args, cwd);
         if (content) {
           await outputReport(content, "今日日报");
+        } else {
+          vscode.window.showInformationMessage("📭 今日暂无工作记录");
         }
         // 刷新侧边栏
         await refreshTreeView();
@@ -460,6 +460,8 @@ async function handleInsertAtCursor() {
             editBuilder.insert(editor.selection.active, content);
           });
           vscode.window.showInformationMessage("✅ 日报已插入到光标位置");
+        } else {
+          vscode.window.showInformationMessage("📭 今日暂无工作记录");
         }
         await refreshTreeView();
       } catch (err: any) {
@@ -494,9 +496,8 @@ async function handleAddManualEntry() {
     const config = getConfig();
     const proc = spawn(config.pythonCommand, args, {
       cwd,
-      shell: false,
+      shell: true,
       stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
     });
 
     proc.stdin?.write(content + "\n\n");

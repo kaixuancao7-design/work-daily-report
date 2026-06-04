@@ -223,6 +223,15 @@ def generate_today(author, repo, output, no_manual, save, template, data_dir):
     # 4. 生成报告
     if not all_entries and not extra_notes:
         click.echo("📭 今日暂无工作记录", err=True)
+        # 非交互模式（如 VSCode 扩展调用）仍输出空日报到 stdout
+        if no_manual:
+            report_text = generate_daily_report(
+                entries=[],
+                report_date=d,
+                extra_notes="",
+                template_name=template,
+            )
+            click.echo(report_text)
         return
 
     report_text = generate_daily_report(
