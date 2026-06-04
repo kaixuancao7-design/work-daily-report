@@ -98,10 +98,12 @@ async function runPythonCli(
   const pythonCmd = config.pythonCommand;
 
   return new Promise((resolve, reject) => {
+    // 不使用 shell: true，避免 Windows 上额外启动 cmd.exe 的开销
     const proc = spawn(pythonCmd, args, {
       cwd,
-      shell: true,
+      shell: false,
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,  // 隐藏控制台窗口闪烁
     });
 
     let stdout = "";
@@ -492,8 +494,9 @@ async function handleAddManualEntry() {
     const config = getConfig();
     const proc = spawn(config.pythonCommand, args, {
       cwd,
-      shell: true,
+      shell: false,
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     });
 
     proc.stdin?.write(content + "\n\n");

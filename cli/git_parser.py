@@ -188,8 +188,51 @@ class GitParser:
         return self._is_git_repo(self.repo_path)
 
 
+# 自动发现时跳过的高频非仓库目录
+_SKIP_DIRS = {
+    "node_modules", "__pycache__", ".git", ".svn", ".hg",
+    "venv", ".venv", "env", ".env", ".tox",
+    "dist", "build", ".eggs", "eggs",
+    ".vscode", ".idea", ".claude",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    "site-packages", "__pypackages__",
+    "bower_components", ".next", ".nuxt",
+}
+
+# 自动发现时跳过的路径前缀模式
+_SKIP_PATTERNS = [
+    r"\.(git|svn|hg)$",
+    r"node_modules",
+    r"__pycache__",
+    r"(venv|\.venv|\.tox)$",
+    r"site-packages",
+    r"\.(vscode|idea|claude)$",
+]
+
+
+def _should_skip_dir(dir_path: Path) -> bool:
+    """快速判断目录是否应该跳过（纯文件系统检查，不启动子进程）"""
+    name = dir_path.name
+    if name in _SKIP_DIRS:
+        return True
+    # 跳过隐藏目录（除了 . 和 ..）
+    if name.startswith(".") and name not in (".", ".."):
+        return True
+    return False
+
+
+def _has_git_dir(path: Path) -> bool:
+    """快速检查路径是否包含 .git 目录（纯文件系统检查，不启动子进程）"""
+    return (path / ".git").is_dir()
+
+
 def auto_detect_repos(base_path: str = ".", max_depth: int = 2) -> list[str]:
     """自动检测指定路径下的 Git 仓库列表
+
+    优化策略：
+    1. 先用纯文件系统检查 .git 目录，确认后再用 git rev-parse 验证
+    2. 跳过 node_modules、__pycache__ 等高频非仓库目录
+    3. 跳过所有隐藏目录
 
     Args:
         base_path: 扫描起点
@@ -199,14 +242,24 @@ def auto_detect_repos(base_path: str = ".", max_depth: int = 2) -> list[str]:
     base = Path(base_path).resolve()
 
     # 首先检查 base_path 自身
-    if GitParser._is_git_repo(base):
+    if _has_git_dir(base) and GitParser._is_git_repo(base):
         repos.append(str(base))
 
     # 扫描子目录
     for depth in range(1, max_depth + 1):
         pattern = "/".join(["*"] * depth)
         for p in base.glob(pattern):
-            if p.is_dir() and GitParser._is_git_repo(p) and str(p) not in repos:
+            if not p.is_dir():
+                continue
+            if _should_skip_dir(p):
+                continue
+            if str(p) in repos:
+                continue
+            # 快速过滤：没有 .git 目录的直接跳过
+            if not _has_git_dir(p):
+                continue
+            # 最终用 git rev-parse 确认
+            if GitParser._is_git_repo(p):
                 repos.append(str(p))
 
     return repos
