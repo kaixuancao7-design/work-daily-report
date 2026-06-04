@@ -49,6 +49,11 @@
         "command": "dailyReport.refreshEntries",
         "title": "日报: 刷新今日条目",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "dailyReport.export",
+        "title": "日报: 导出日报",
+        "icon": "$(export)"
       }
     ],
     "menus": {
@@ -64,6 +69,9 @@
         },
         {
           "command": "dailyReport.addManualEntry"
+        },
+        {
+          "command": "dailyReport.export"
         }
       ],
       "editor/context": [
@@ -119,19 +127,40 @@
             "在新编辑器标签页中打开",
             "复制到剪贴板"
           ]
+        },
+        "dailyReport.templateFormat": {
+          "type": "string",
+          "default": "default",
+          "enum": [
+            "default",
+            "feishu",
+            "dingtalk"
+          ],
+          "enumDescriptions": [
+            "默认 Markdown 格式",
+            "飞书消息格式",
+            "钉钉消息格式"
+          ],
+          "description": "日报模板输出格式"
         }
       }
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kaixuancao/work-daily-report"
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "lint": "echo 'no linter configured'"
+    "lint": "echo 'no linter configured'",
+    "package": "vsce package"
   },
   "devDependencies": {
-    "@types/vscode": "^1.80.0",
     "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.9.2",
     "typescript": "^5.0.0"
   }
 }

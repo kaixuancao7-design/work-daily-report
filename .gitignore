@@ -8,9 +8,17 @@ build/
 .venv/
 venv/
 
+# Node.js / VSCode Extension
+node_modules/
+*.vsix
+vscode-extension/out/
+
 # IDE
 .vscode/
 .idea/
+
+# Claude Code
+.claude/
 
 # Data (日报数据用户本地保留，不提交到仓库)
 data/daily-reports/

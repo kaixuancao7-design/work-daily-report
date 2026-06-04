@@ -65,6 +65,7 @@ function getConfig() {
     pythonCommand: wsConfig.get<string>("pythonCommand") || "python",
     dataDir: wsConfig.get<string>("dataDir") || "",
     outputTarget: wsConfig.get<string>("outputTarget") || "outputChannel",
+    templateFormat: wsConfig.get<string>("templateFormat") || "default",
   };
 }
 
@@ -372,10 +373,16 @@ async function refreshTreeView() {
 // ─── 命令处理器 ───────────────────────────────────
 
 async function handleGenerateToday() {
+  const config = getConfig();
+  const templateArgs = config.templateFormat !== "default"
+    ? ["--template", config.templateFormat === "feishu" ? "daily-feishu.md.j2"
+      : config.templateFormat === "dingtalk" ? "daily-dingtalk.md.j2"
+      : "daily.md.j2"]
+    : [];
   const { args, cwd } = getPythonCliArgs("generate today", [
     "--no-manual",
-    "--output",
-    "stdout",
+    "--output", "stdout",
+    ...templateArgs,
   ]);
 
   await vscode.window.withProgress(
@@ -606,6 +613,33 @@ function renderMarkdownAsHtml(markdown: string): string {
 </html>`;
 }
 
+async function handleExport() {
+  const config = getConfig();
+  const format = config.templateFormat || "markdown";
+  const { args, cwd } = getPythonCliArgs("export today", [
+    "--format", format,
+    "--output", "stdout",
+  ]);
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: "正在导出日报...",
+      cancellable: false,
+    },
+    async (progress) => {
+      try {
+        const content = await runPythonCli(args, cwd);
+        if (content) {
+          await outputReport(content, "日报导出");
+        }
+      } catch (err: any) {
+        vscode.window.showErrorMessage(`导出失败: ${err.message}`);
+      }
+    }
+  );
+}
+
 // ─── 激活 & 停用 ──────────────────────────────────
 
 export function activate(context: vscode.ExtensionContext) {
@@ -638,6 +672,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("dailyReport.addManualEntry", handleAddManualEntry),
     vscode.commands.registerCommand("dailyReport.previewToday", handlePreviewToday),
     vscode.commands.registerCommand("dailyReport.refreshEntries", () => refreshTreeView()),
+    vscode.commands.registerCommand("dailyReport.export", handleExport),
   ];
   context.subscriptions.push(...commands);
 

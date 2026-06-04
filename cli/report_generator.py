@@ -21,17 +21,47 @@ from cli.utils import get_weekday_zh, format_date
 # ─── 模板环境 ─────────────────────────────────────
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
+_custom_template_dirs: list[str] = []
 
-_jinja_env = Environment(
-    loader=FileSystemLoader(str(_TEMPLATE_DIR)),
-    trim_blocks=True,
-    lstrip_blocks=True,
-)
+_jinja_env: Environment | None = None
+
+
+def _get_env() -> Environment:
+    """获取 Jinja2 环境（支持多模板路径）"""
+    global _jinja_env
+    if _jinja_env is None:
+        _rebuild_env()
+    return _jinja_env  # type: ignore
+
+
+def _rebuild_env():
+    """重建 Jinja2 环境，合并内置模板和自定义模板目录"""
+    global _jinja_env
+    search_paths = [str(_TEMPLATE_DIR)] + _custom_template_dirs
+    _jinja_env = Environment(
+        loader=FileSystemLoader(search_paths),
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+
+
+def set_custom_template_dir(dir_path: str):
+    """添加自定义模板搜索目录"""
+    if dir_path and dir_path not in _custom_template_dirs:
+        _custom_template_dirs.append(dir_path)
+        _rebuild_env()
+
+
+def list_templates() -> list[str]:
+    """列出所有可用模板"""
+    env = _get_env()
+    return env.loader.list_templates()  # type: ignore
 
 
 def _render(template_name: str, **kwargs) -> str:
     """渲染 Jinja2 模板"""
-    template = _jinja_env.get_template(template_name)
+    env = _get_env()
+    template = env.get_template(template_name)
     return template.render(**kwargs).strip()
 
 
@@ -41,6 +71,7 @@ def generate_daily_report(
     entries: list[DailyEntry],
     report_date: Optional[date] = None,
     extra_notes: str = "",
+    template_name: str = "daily.md.j2",
 ) -> str:
     """生成日报 Markdown 文本
 
@@ -48,6 +79,7 @@ def generate_daily_report(
         entries: 日报条目列表
         report_date: 日报日期，默认今天
         extra_notes: 额外备注
+        template_name: 模板文件名（支持 daily.md.j2 / daily-feishu.md.j2 / daily-dingtalk.md.j2）
 
     Returns:
         日报 Markdown 文本
@@ -64,7 +96,7 @@ def generate_daily_report(
         grouped[e.repo_name].append(e)
 
     return _render(
-        "daily.md.j2",
+        template_name,
         date=format_date(d),
         day_of_week=get_weekday_zh(d),
         grouped_entries=grouped,
@@ -158,6 +190,7 @@ def generate_weekly_report(
     week_start: Optional[date] = None,
     summary: str = "",
     next_week_plan: str = "",
+    template_name: str = "weekly.md.j2",
 ) -> str:
     """生成周报 Markdown 文本
 
@@ -166,6 +199,7 @@ def generate_weekly_report(
         week_start: 周一日期
         summary: 智能总结文本（可选）
         next_week_plan: 下周计划
+        template_name: 模板文件名
 
     Returns:
         周报 Markdown 文本
@@ -202,7 +236,7 @@ def generate_weekly_report(
     week_end = week_start + timedelta(days=6)
 
     return _render(
-        "weekly.md.j2",
+        template_name,
         week_start=format_date(week_start),
         week_end=format_date(week_end),
         daily_reports=daily_reports,

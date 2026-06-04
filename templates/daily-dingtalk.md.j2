@@ -1,0 +1,20 @@
+{# 钉钉日报模板 #}
+## {{ date }} {{ day_of_week }}
+
+{% for repo_name, entries in grouped_entries.items() %}
+> **{{ repo_name }}**
+{% for entry in entries %}
+> - {{ entry.content }}{% if entry.branch %} ({{ entry.branch }}){% endif %}
+{% endfor %}
+{% endfor %}
+
+{% if manual_entries %}
+> **其他工作**
+{% for entry in manual_entries %}
+> - {{ entry.content }}
+{% endfor %}
+{% endif %}
+
+{% if extra_notes %}
+> 📌 {{ extra_notes }}
+{% endif %}

@@ -108,12 +108,12 @@ class DailyReport:
 @dataclass
 class Config:
     """全局配置"""
+    # Git 相关
     git_author: str = ""
     git_author_email: str = ""
     scan_repos: list[str] = field(default_factory=list)
-    report_language: str = "zh"
-    daily_template: str = "daily.md.j2"
-    weekly_template: str = "weekly.md.j2"
+    auto_detect_repos: bool = True          # 自动扫描工作区下所有 Git 仓库
+    scan_max_depth: int = 3                 # 自动扫描最大目录深度
     include_branches: list[str] = field(default_factory=lambda: ["*"])
     exclude_branches: list[str] = field(default_factory=list)
     exclude_patterns: list[str] = field(default_factory=lambda: [
@@ -121,17 +121,40 @@ class Config:
         r"auto-commit",
     ])
 
+    # 报告相关
+    report_language: str = "zh"
+    daily_template: str = "daily.md.j2"
+    weekly_template: str = "weekly.md.j2"
+    custom_template_dir: str = ""           # 用户自定义模板目录
+
+    # LLM 总结
+    llm_api_key: str = ""                   # API Key（支持环境变量 LLM_API_KEY）
+    llm_api_base: str = ""                  # API 地址（空=默认 OpenAI / Anthropic）
+    llm_model: str = "claude-sonnet-4-6"    # 模型名
+
+    # 导出 & 推送
+    export_webhook_url: str = ""            # 飞书/钉钉机器人 Webhook
+    export_format: str = "markdown"         # 默认导出格式
+
     def to_dict(self) -> dict:
         return {
             "git_author": self.git_author,
             "git_author_email": self.git_author_email,
             "scan_repos": self.scan_repos,
-            "report_language": self.report_language,
-            "daily_template": self.daily_template,
-            "weekly_template": self.weekly_template,
+            "auto_detect_repos": self.auto_detect_repos,
+            "scan_max_depth": self.scan_max_depth,
             "include_branches": self.include_branches,
             "exclude_branches": self.exclude_branches,
             "exclude_patterns": self.exclude_patterns,
+            "report_language": self.report_language,
+            "daily_template": self.daily_template,
+            "weekly_template": self.weekly_template,
+            "custom_template_dir": self.custom_template_dir,
+            "llm_api_key": self.llm_api_key,
+            "llm_api_base": self.llm_api_base,
+            "llm_model": self.llm_model,
+            "export_webhook_url": self.export_webhook_url,
+            "export_format": self.export_format,
         }
 
     @classmethod
@@ -140,13 +163,21 @@ class Config:
             git_author=d.get("git_author", ""),
             git_author_email=d.get("git_author_email", ""),
             scan_repos=d.get("scan_repos", []),
-            report_language=d.get("report_language", "zh"),
-            daily_template=d.get("daily_template", "daily.md.j2"),
-            weekly_template=d.get("weekly_template", "weekly.md.j2"),
+            auto_detect_repos=d.get("auto_detect_repos", True),
+            scan_max_depth=d.get("scan_max_depth", 3),
             include_branches=d.get("include_branches", ["*"]),
             exclude_branches=d.get("exclude_branches", []),
             exclude_patterns=d.get("exclude_patterns", [
                 r"^(Merge|chore|WIP)",
                 r"auto-commit",
             ]),
+            report_language=d.get("report_language", "zh"),
+            daily_template=d.get("daily_template", "daily.md.j2"),
+            weekly_template=d.get("weekly_template", "weekly.md.j2"),
+            custom_template_dir=d.get("custom_template_dir", ""),
+            llm_api_key=d.get("llm_api_key", ""),
+            llm_api_base=d.get("llm_api_base", ""),
+            llm_model=d.get("llm_model", "claude-sonnet-4-6"),
+            export_webhook_url=d.get("export_webhook_url", ""),
+            export_format=d.get("export_format", "markdown"),
         )

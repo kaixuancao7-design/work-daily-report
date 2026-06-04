@@ -30,6 +30,7 @@ from cli.storage import Storage, ConfigManager
 from cli.report_generator import (
     generate_daily_report, generate_weekly_report,
     entries_from_commits,
+    set_custom_template_dir, list_templates,
 )
 from cli.utils import (
     today, this_week_range, format_date, parse_date,
@@ -54,14 +55,28 @@ def _get_git_parser(repo_path: str = ".", author: str = "") -> GitParser:
     return GitParser(repo_path=repo_path, author=author)
 
 
+def _resolve_repos(config: Config, user_repos: list[str]) -> list[str]:
+    """解析仓库列表：用户指定 > 配置列表 > 自动检测"""
+    if user_repos:
+        return list(user_repos)
+    if config.scan_repos:
+        return config.scan_repos
+    if config.auto_detect_repos:
+        detected = auto_detect_repos(max_depth=config.scan_max_depth)
+        if detected:
+            click.echo(f"🔍 自动检测到 {len(detected)} 个 Git 仓库", err=True)
+            for r in detected:
+                click.echo(f"  📦 {r}", err=True)
+            return detected
+    return ["."]
+
+
 def _collect_today_entries(
     config: Config,
     repo_paths: Optional[list[str]] = None,
 ) -> tuple[list[DailyEntry], dict[str, list[CommitInfo]]]:
     """收集今天所有 Git 提交并转换为日报条目"""
-    repos = repo_paths or config.scan_repos
-    if not repos:
-        repos = ["."]
+    repos = _resolve_repos(config, list(repo_paths) if repo_paths else [])
 
     author = config.git_author or get_default_author()
 
@@ -147,18 +162,25 @@ def generate():
               help="输出方式")
 @click.option("--no-manual", is_flag=True, help="跳过交互式手动补充")
 @click.option("--save/--no-save", default=True, help="是否保存日报到 JSON 存储")
+@click.option("--template", "-t", default="daily.md.j2",
+              help="模板名称（daily.md.j2 / daily-feishu.md.j2 / daily-dingtalk.md.j2）")
 @click.option("--data-dir", default=DEFAULT_DATA_DIR, help="数据存储目录")
-def generate_today(author, repo, output, no_manual, save, data_dir):
+def generate_today(author, repo, output, no_manual, save, template, data_dir):
     """生成今日日报"""
     d = today()
     storage = _get_storage(data_dir)
     config = _get_config(data_dir)
 
+    # 设置自定义模板目录
+    if config.custom_template_dir:
+        set_custom_template_dir(config.custom_template_dir)
+
     # 覆盖配置中的参数
     if author:
         config.git_author = author
 
-    repo_paths = list(repo) if repo else config.scan_repos
+    # 解析仓库列表（支持自动检测）
+    repo_paths = list(repo) if repo else []
 
     # 1. 收集 Git 提交
     click.echo(f"🔍 扫描今日 ({format_date(d)}) Git 提交...", err=True)
@@ -207,6 +229,7 @@ def generate_today(author, repo, output, no_manual, save, data_dir):
         entries=all_entries,
         report_date=d,
         extra_notes=extra_notes,
+        template_name=template,
     )
 
     click.echo()
@@ -230,10 +253,18 @@ def generate_today(author, repo, output, no_manual, save, data_dir):
 @click.option("--output", "-o", default="stdout",
               type=click.Choice(["stdout", "clipboard", "file"]),
               help="输出方式")
+@click.option("--summary", is_flag=True, help="使用 LLM 对本周工作进行智能总结")
+@click.option("--template", "-t", default="weekly.md.j2",
+              help="模板名称（weekly.md.j2 等）")
 @click.option("--data-dir", default=DEFAULT_DATA_DIR, help="数据存储目录")
-def generate_week(from_date, to_date, output, data_dir):
+def generate_week(from_date, to_date, output, summary, template, data_dir):
     """生成本周周报（从已保存的日报中汇总）"""
     storage = _get_storage(data_dir)
+    config = _get_config(data_dir)
+
+    # 设置自定义模板目录
+    if config.custom_template_dir:
+        set_custom_template_dir(config.custom_template_dir)
 
     # 确定周范围
     if from_date:
@@ -257,6 +288,17 @@ def generate_week(from_date, to_date, output, data_dir):
 
     click.echo(f"  ✓ 找到 {len(daily_reports)} 天日报", err=True)
 
+    # LLM 智能总结
+    summary_text = ""
+    if summary:
+        click.echo("🤖 正在调用 AI 生成本周总结...", err=True)
+        from cli.llm_summary import generate_weekly_summary
+        summary_text = generate_weekly_summary(daily_reports, config) or ""
+        if summary_text:
+            click.echo(f"  ✓ AI 总结: {summary_text[:80]}...", err=True)
+        else:
+            click.echo("  ⚠️ LLM 总结失败（请检查 API Key 配置），使用默认统计", err=True)
+
     # 交互式输入下周计划
     next_plan = ""
     if sys.stdin.isatty():
@@ -267,7 +309,9 @@ def generate_week(from_date, to_date, output, data_dir):
     report_text = generate_weekly_report(
         daily_reports=daily_reports,
         week_start=monday,
+        summary=summary_text,
         next_week_plan=next_plan,
+        template_name=template,
     )
 
     click.echo()
@@ -412,9 +456,52 @@ def config_cmd(show_config, set_author, add_repo, data_dir):
         click.echo("📋 当前配置:")
         click.echo(f"  Git 作者: {config.git_author or '(自动检测)'}")
         click.echo(f"  Git 邮箱: {config.git_author_email or '(自动检测)'}")
-        click.echo(f"  扫描仓库: {config.scan_repos or '(仅当前目录)'}")
+        click.echo(f"  扫描仓库: {config.scan_repos or '(自动检测)'}")
+        click.echo(f"  自动发现仓库: {'开' if config.auto_detect_repos else '关'}")
+        click.echo(f"  扫描深度: {config.scan_max_depth}")
         click.echo(f"  排除模式: {config.exclude_patterns}")
         click.echo(f"  报告语言: {config.report_language}")
+        click.echo(f"  日报模板: {config.daily_template}")
+        click.echo(f"  周报模板: {config.weekly_template}")
+        click.echo(f"  自定义模板目录: {config.custom_template_dir or '(未设置)'}")
+        click.echo(f"  LLM 模型: {config.llm_model}")
+        click.echo(f"  LLM API Key: {'已设置' if config.llm_api_key else '(未设置)'}")
+        click.echo(f"  Webhook 地址: {config.export_webhook_url or '(未设置)'}")
+
+
+# ─── export 子命令 ────────────────────────────────
+
+@cli.command("export")
+@click.argument("what", type=click.Choice(["today", "week"]), default="today")
+@click.option("--format", "-f", "fmt", default="markdown",
+              type=click.Choice(["markdown", "feishu", "dingtalk", "text"]),
+              help="导出格式")
+@click.option("--webhook", "-w", default="", help="Webhook 地址（飞书/钉钉机器人）")
+@click.option("--output", "-o", default="stdout",
+              type=click.Choice(["stdout", "clipboard", "file"]),
+              help="输出方式")
+@click.option("--data-dir", default=DEFAULT_DATA_DIR, help="数据存储目录")
+def export_cmd(what, fmt, webhook, output, data_dir):
+    """导出日报/周报（支持飞书、钉钉格式，可选 Webhook 推送）"""
+    from cli.export import export_report
+
+    storage = _get_storage(data_dir)
+    d = today()
+
+    if what == "today":
+        click.echo(f"📋 导出 {format_date(d)} 日报...", err=True)
+    else:
+        click.echo(f"📋 导出本周周报...", err=True)
+
+    text = export_report(
+        storage=storage,
+        report_date=d,
+        export_type="daily" if what == "today" else "week",
+        format=fmt,
+        webhook_url=webhook or "",
+    )
+
+    _output_report(text, output)
 
 
 # ─── vscode 子命令（供 VSCode 扩展调用）────────────
