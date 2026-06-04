@@ -518,14 +518,57 @@ def export_cmd(what, fmt, webhook, output, data_dir):
 @cli.command("vscode")
 @click.option("--today", "vscode_today", is_flag=True, help="输出今日日报 JSON")
 @click.option("--week", "vscode_week", is_flag=True, help="输出周报 JSON")
+@click.option("--history-tree", "vscode_history_tree", is_flag=True,
+              help="输出所有日报文件的层级树 JSON（年→月→日）")
+@click.option("--report", "vscode_report_date", default="",
+              help="输出指定日期的 Markdown 日报（YYYY-MM-DD）")
+@click.option("--catchup", "vscode_catchup", is_flag=True,
+              help="检查并补全缺失的日报/周报")
 @click.option("--json", "as_json", is_flag=True, help="以 JSON 格式输出")
 @click.option("--data-dir", default=DEFAULT_DATA_DIR, help="数据存储目录")
-def vscode_cmd(vscode_today, vscode_week, as_json, data_dir):
+def vscode_cmd(vscode_today, vscode_week, vscode_history_tree,
+               vscode_report_date, vscode_catchup, as_json, data_dir):
     """VSCode 专用子命令（以结构化 JSON 输出）"""
     storage = _get_storage(data_dir)
     config = _get_config(data_dir)
 
-    if vscode_today:
+    if vscode_history_tree:
+        # 输出所有日报文件的年→月→日层级树
+        all_dates = storage.list_all_report_dates()
+        tree = _build_history_tree(storage, all_dates)
+        click.echo(json.dumps(tree, ensure_ascii=False, indent=2))
+
+    elif vscode_report_date:
+        # 输出指定日期的完整 Markdown 日报
+        d = parse_date(vscode_report_date)
+        report = storage.load_daily_report(d)
+        if report is None:
+            click.echo(json.dumps({"status": "not_found", "date": vscode_report_date},
+                                  ensure_ascii=False))
+            return
+        if as_json:
+            click.echo(json.dumps({
+                "status": "ok",
+                "date": report.date,
+                "day_of_week": report.day_of_week,
+                "entries": [e.to_dict() for e in report.entries],
+                "extra_notes": report.extra_notes,
+            }, ensure_ascii=False, indent=2))
+        else:
+            text = generate_daily_report(
+                entries=report.entries,
+                report_date=d,
+                extra_notes=report.extra_notes,
+            )
+            click.echo(text)
+
+    elif vscode_catchup:
+        # 检查并补全缺失的日报/周报
+        from cli.scheduler import run_catchup
+        result = run_catchup(storage, config)
+        click.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+    elif vscode_today:
         d = today()
         entries, commits_by_repo = _collect_today_entries(config)
         existing_report = storage.load_daily_report(d)
@@ -574,7 +617,74 @@ def vscode_cmd(vscode_today, vscode_week, as_json, data_dir):
             click.echo(report_text)
 
     else:
-        click.echo("请指定 --today 或 --week", err=True)
+        click.echo("请指定 --today | --week | --history-tree | --report <date> | --catchup", err=True)
+
+
+def _build_history_tree(storage: Storage, all_dates: list[date]) -> dict:
+    """构建年→月→日的日报层级树
+
+    Returns:
+        {
+            "status": "ok",
+            "total": 10,
+            "years": [
+                {
+                    "year": 2026,
+                    "months": [
+                        {
+                            "month": 6,
+                            "dates": [
+                                {
+                                    "date": "2026-06-04",
+                                    "day_of_week": "星期四",
+                                    "git_count": 3,
+                                    "manual_count": 2
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    """
+    from collections import defaultdict
+
+    by_year: dict[int, dict[int, list[dict]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+
+    for d in sorted(all_dates, reverse=True):
+        report = storage.load_daily_report(d)
+        if report is None:
+            continue
+        git_count = sum(
+            1 for e in report.entries if e.source == EntrySource.GIT_COMMIT
+        )
+        manual_count = sum(
+            1 for e in report.entries if e.source == EntrySource.MANUAL
+        )
+        by_year[d.year][d.month].append({
+            "date": format_date(d),
+            "day_of_week": get_weekday_zh(d),
+            "git_count": git_count,
+            "manual_count": manual_count,
+        })
+
+    years = []
+    for year in sorted(by_year.keys(), reverse=True):
+        months_data = []
+        for month in sorted(by_year[year].keys(), reverse=True):
+            months_data.append({
+                "month": month,
+                "dates": by_year[year][month],
+            })
+        years.append({"year": year, "months": months_data})
+
+    return {
+        "status": "ok",
+        "total": len(all_dates),
+        "years": years,
+    }
 
 
 # ─── 入口 ─────────────────────────────────────────

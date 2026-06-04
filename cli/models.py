@@ -136,6 +136,14 @@ class Config:
     export_webhook_url: str = ""            # 飞书/钉钉机器人 Webhook
     export_format: str = "markdown"         # 默认导出格式
 
+    # 定时调度
+    schedule_enabled: bool = True           # 是否启用自动定时总结
+    schedule_daily_time: str = "18:00"      # 每日自动生成日报的时间
+    schedule_weekly_day: int = 5            # 周报生成日 (5=周五)
+    schedule_weekly_time: str = "18:30"     # 周报生成时间
+    schedule_auto_save: bool = True         # 是否自动保存
+    schedule_auto_summary: bool = False     # 周报是否启用 LLM 总结
+
     def to_dict(self) -> dict:
         return {
             "git_author": self.git_author,
@@ -155,6 +163,12 @@ class Config:
             "llm_model": self.llm_model,
             "export_webhook_url": self.export_webhook_url,
             "export_format": self.export_format,
+            "schedule_enabled": self.schedule_enabled,
+            "schedule_daily_time": self.schedule_daily_time,
+            "schedule_weekly_day": self.schedule_weekly_day,
+            "schedule_weekly_time": self.schedule_weekly_time,
+            "schedule_auto_save": self.schedule_auto_save,
+            "schedule_auto_summary": self.schedule_auto_summary,
         }
 
     @classmethod
@@ -180,4 +194,10 @@ class Config:
             llm_model=d.get("llm_model", "claude-sonnet-4-6"),
             export_webhook_url=d.get("export_webhook_url", ""),
             export_format=d.get("export_format", "markdown"),
+            schedule_enabled=d.get("schedule_enabled", True),
+            schedule_daily_time=d.get("schedule_daily_time", "18:00"),
+            schedule_weekly_day=d.get("schedule_weekly_day", 5),
+            schedule_weekly_time=d.get("schedule_weekly_time", "18:30"),
+            schedule_auto_save=d.get("schedule_auto_save", True),
+            schedule_auto_summary=d.get("schedule_auto_summary", False),
         )

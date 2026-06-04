@@ -54,6 +54,21 @@
         "command": "dailyReport.export",
         "title": "日报: 导出日报",
         "icon": "$(export)"
+      },
+      {
+        "command": "dailyReport.viewHistoryReport",
+        "title": "日报: 查看历史日报",
+        "icon": "$(history)"
+      },
+      {
+        "command": "dailyReport.refreshHistoryTree",
+        "title": "日报: 刷新历史日报列表",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "dailyReport.catchupNow",
+        "title": "日报: 立即检查并补全缺失日报",
+        "icon": "$(debug-start)"
       }
     ],
     "menus": {
@@ -72,6 +87,15 @@
         },
         {
           "command": "dailyReport.export"
+        },
+        {
+          "command": "dailyReport.viewHistoryReport"
+        },
+        {
+          "command": "dailyReport.refreshHistoryTree"
+        },
+        {
+          "command": "dailyReport.catchupNow"
         }
       ],
       "editor/context": [
@@ -98,6 +122,12 @@
           "name": "今日工作",
           "type": "tree",
           "icon": "$(checklist)"
+        },
+        {
+          "id": "dailyReport.historyTree",
+          "name": "历史日报",
+          "type": "tree",
+          "icon": "$(history)"
         }
       ]
     },
@@ -142,6 +172,18 @@
             "钉钉消息格式"
           ],
           "description": "日报模板输出格式"
+        },
+        "dailyReport.autoCatchup": {
+          "type": "boolean",
+          "default": true,
+          "description": "启动时自动检查并补全缺失的日报/周报"
+        },
+        "dailyReport.catchupDays": {
+          "type": "number",
+          "default": 7,
+          "minimum": 1,
+          "maximum": 30,
+          "description": "自动补全时回溯的最大天数"
         }
       }
     }

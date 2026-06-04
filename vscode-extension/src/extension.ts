@@ -276,9 +276,159 @@ class DailyReportTreeDataProvider
   }
 }
 
+// ─── 历史日报 TreeView ──────────────────────────
+
+interface HistoryTreeNode {
+  type: "year" | "month" | "date" | "empty";
+  label: string;
+  year?: number;
+  month?: number;
+  date?: string;
+  dayOfWeek?: string;
+  gitCount?: number;
+  manualCount?: number;
+  children?: HistoryTreeNode[];
+}
+
+class HistoryTreeDataProvider
+  implements vscode.TreeDataProvider<HistoryTreeNode>
+{
+  private _onDidChangeTreeData = new vscode.EventEmitter<
+    HistoryTreeNode | undefined | void
+  >();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  private rootNodes: HistoryTreeNode[] = [];
+
+  refresh(): void {
+    this._onDidChangeTreeData.fire();
+  }
+
+  setData(nodes: HistoryTreeNode[]) {
+    this.rootNodes = nodes;
+    this.refresh();
+  }
+
+  getTreeItem(element: HistoryTreeNode): vscode.TreeItem {
+    if (element.type === "year") {
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.Collapsed
+      );
+      item.iconPath = new vscode.ThemeIcon("calendar");
+      item.contextValue = "history-year";
+      return item;
+    }
+    if (element.type === "month") {
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.Collapsed
+      );
+      item.iconPath = new vscode.ThemeIcon("folder");
+      item.contextValue = "history-month";
+      return item;
+    }
+    if (element.type === "date") {
+      const counts = `Git:${element.gitCount ?? 0} 手动:${element.manualCount ?? 0}`;
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.None
+      );
+      item.description = counts;
+      item.iconPath = new vscode.ThemeIcon("note");
+      item.contextValue = "history-date";
+      item.tooltip = `${element.date} ${element.dayOfWeek} — ${counts}`;
+      item.command = {
+        command: "dailyReport.viewHistoryReport",
+        title: "查看日报",
+        arguments: [element],
+      };
+      return item;
+    }
+    // empty
+    return new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
+  }
+
+  getChildren(element?: HistoryTreeNode): HistoryTreeNode[] {
+    if (element && element.children) {
+      return element.children;
+    }
+    if (!element) {
+      return this.rootNodes;
+    }
+    return [];
+  }
+
+  getParent(): undefined {
+    return undefined;
+  }
+}
+
+async function buildHistoryTreeNodes(): Promise<HistoryTreeNode[]> {
+  const { args, cwd } = getPythonCliArgs("vscode --history-tree", []);
+  try {
+    const output = await runPythonCli(args, cwd);
+    const data = JSON.parse(output);
+    if (data.status !== "ok" || !data.years) {
+      return [{ type: "empty", label: "暂无历史日报" }];
+    }
+    return data.years.map((y: any) => ({
+      type: "year" as const,
+      label: `📅 ${y.year}年`,
+      year: y.year,
+      children: y.months.map((m: any) => ({
+        type: "month" as const,
+        label: `📁 ${String(m.month).padStart(2, "0")}月 (${m.dates.length}天)`,
+        month: m.month,
+        year: y.year,
+        children: m.dates.map((dt: any) => ({
+          type: "date" as const,
+          label: `📄 ${dt.date.slice(5)} ${dt.day_of_week}`,
+          date: dt.date,
+          dayOfWeek: dt.day_of_week,
+          gitCount: dt.git_count,
+          manualCount: dt.manual_count,
+        })),
+      })),
+    }));
+  } catch {
+    return [{ type: "empty", label: "加载历史日报失败" }];
+  }
+}
+
+async function handleViewHistoryReport(node: HistoryTreeNode) {
+  if (!node.date) return;
+
+  const { args, cwd } = getPythonCliArgs("vscode", [
+    "--report", node.date,
+  ]);
+  try {
+    const content = await runPythonCli(args, cwd);
+    if (content) {
+      const panel = vscode.window.createWebviewPanel(
+        "dailyReportHistory",
+        `日报 ${node.date}`,
+        vscode.ViewColumn.Beside,
+        { enableScripts: false }
+      );
+      panel.webview.html = renderMarkdownAsHtml(content);
+    }
+  } catch (err: any) {
+    vscode.window.showErrorMessage(`加载历史日报失败: ${err.message}`);
+  }
+}
+
+async function handleRefreshHistoryTree() {
+  if (!historyTreeProvider) return;
+  const nodes = await buildHistoryTreeNodes();
+  historyTreeProvider.setData(nodes);
+}
+
+
 // ─── 条目缓存与刷新 ──────────────────────────────
 
 let treeProvider: DailyReportTreeDataProvider;
+let historyTreeProvider: HistoryTreeDataProvider;
 
 function buildTreeEntries(data: VscodeTodayResult): TreeEntry[] {
   const treeEntries: TreeEntry[] = [];
@@ -644,18 +794,85 @@ async function handleExport() {
   );
 }
 
+// ─── 定时调度服务 ───────────────────────────────
+
+const CATCHUP_INTERVAL_MS = 30 * 60 * 1000; // 30 分钟
+
+class SchedulerService {
+  private intervalId: NodeJS.Timeout | null = null;
+
+  async runCatchup() {
+    const { args, cwd } = getPythonCliArgs("vscode --catchup", []);
+    try {
+      const output = await runPythonCli(args, cwd);
+      const result = JSON.parse(output);
+      if (result.status === "ok") {
+        const dailyCount = (result.daily_generated as string[]).length;
+        const weeklyInfo = result.weekly_generated as string;
+        if (dailyCount > 0 || weeklyInfo) {
+          const parts: string[] = [];
+          if (dailyCount > 0) {
+            parts.push(`${dailyCount} 天日报`);
+          }
+          if (weeklyInfo) {
+            parts.push(`周报 (${weeklyInfo})`);
+          }
+          vscode.window.showInformationMessage(
+            `📋 已自动补全: ${parts.join(" + ")}`
+          );
+        }
+      }
+    } catch {
+      // 静默处理，不影响正常使用
+    }
+  }
+
+  start(context: vscode.ExtensionContext) {
+    // 启动时执行追赶
+    this.runCatchup();
+
+    // 定时检查
+    this.intervalId = setInterval(() => {
+      this.runCatchup();
+    }, CATCHUP_INTERVAL_MS);
+
+    context.subscriptions.push({
+      dispose: () => this.stop(),
+    });
+  }
+
+  stop() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+}
+
+
 // ─── 激活 & 停用 ──────────────────────────────────
 
 export function activate(context: vscode.ExtensionContext) {
   console.log("工作日报助手 已激活");
 
-  // 侧边栏 TreeView
+  // 侧边栏 TreeView — 今日工作
   treeProvider = new DailyReportTreeDataProvider();
   const treeView = vscode.window.createTreeView("dailyReport.todayEntries", {
     treeDataProvider: treeProvider,
     showCollapseAll: false,
   });
   context.subscriptions.push(treeView);
+
+  // 侧边栏 TreeView — 历史日报
+  historyTreeProvider = new HistoryTreeDataProvider();
+  const historyTreeView = vscode.window.createTreeView(
+    "dailyReport.historyTree",
+    {
+      treeDataProvider: historyTreeProvider,
+      showCollapseAll: true,
+    }
+  );
+  context.subscriptions.push(historyTreeView);
 
   // 状态栏按钮
   const statusBarItem = vscode.window.createStatusBarItem(
@@ -677,11 +894,22 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("dailyReport.previewToday", handlePreviewToday),
     vscode.commands.registerCommand("dailyReport.refreshEntries", () => refreshTreeView()),
     vscode.commands.registerCommand("dailyReport.export", handleExport),
+    vscode.commands.registerCommand("dailyReport.viewHistoryReport", handleViewHistoryReport),
+    vscode.commands.registerCommand("dailyReport.refreshHistoryTree", () => handleRefreshHistoryTree()),
+    vscode.commands.registerCommand("dailyReport.catchupNow", () => {
+      const scheduler = new SchedulerService();
+      scheduler.runCatchup();
+    }),
   ];
   context.subscriptions.push(...commands);
 
-  // 启动时自动刷新侧边栏
+  // 启动定时调度（追赶 + 定时检查）
+  const scheduler = new SchedulerService();
+  scheduler.start(context);
+
+  // 刷新两个侧边栏
   refreshTreeView();
+  handleRefreshHistoryTree();
 }
 
 export function deactivate() {
