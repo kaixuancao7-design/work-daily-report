@@ -1,0 +1,137 @@
+{
+  "name": "daily-report",
+  "displayName": "工作日报助手",
+  "description": "基于 Git 提交记录自动生成日报/周报，支持手动补充工作条目",
+  "version": "0.1.0",
+  "publisher": "kaixuancao",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "daily-report",
+    "weekly-report",
+    "git",
+    "work-log"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "dailyReport.generateToday",
+        "title": "日报: 生成今日日报",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "dailyReport.generateWeek",
+        "title": "日报: 生成本周周报",
+        "icon": "$(calendar)"
+      },
+      {
+        "command": "dailyReport.insertAtCursor",
+        "title": "日报: 在光标处插入今日日报",
+        "icon": "$(add)"
+      },
+      {
+        "command": "dailyReport.previewToday",
+        "title": "日报: 预览今日日报",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "dailyReport.addManualEntry",
+        "title": "日报: 添加手动工作条目",
+        "icon": "$(plus)"
+      },
+      {
+        "command": "dailyReport.refreshEntries",
+        "title": "日报: 刷新今日条目",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "dailyReport.generateToday"
+        },
+        {
+          "command": "dailyReport.generateWeek"
+        },
+        {
+          "command": "dailyReport.insertAtCursor"
+        },
+        {
+          "command": "dailyReport.addManualEntry"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "dailyReport.insertAtCursor",
+          "group": "daily-report",
+          "when": "editorTextFocus"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "dailyReport",
+          "title": "工作日报",
+          "icon": "$(notebook)"
+        }
+      ]
+    },
+    "views": {
+      "dailyReport": [
+        {
+          "id": "dailyReport.todayEntries",
+          "name": "今日工作",
+          "type": "tree",
+          "icon": "$(checklist)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "工作日报助手",
+      "properties": {
+        "dailyReport.pythonCommand": {
+          "type": "string",
+          "default": "python",
+          "description": "Python 命令（如 python, python3, 或完整路径）"
+        },
+        "dailyReport.dataDir": {
+          "type": "string",
+          "default": "",
+          "description": "数据存储目录，空 = 使用工作区根目录的 data/ 目录"
+        },
+        "dailyReport.outputTarget": {
+          "type": "string",
+          "default": "outputChannel",
+          "enum": [
+            "outputChannel",
+            "newEditor",
+            "clipboard"
+          ],
+          "enumDescriptions": [
+            "输出到输出面板",
+            "在新编辑器标签页中打开",
+            "复制到剪贴板"
+          ]
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "echo 'no linter configured'"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
