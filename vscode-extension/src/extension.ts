@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { spawn } from "child_process";
 import * as path from "path";
-import * as fs from "fs";
 
 // ─── Python CLI 调用 ──────────────────────────────
 
@@ -71,10 +70,11 @@ function getPythonCliArgs(
   const cmdParts = subcommand.split(" ");
   const args = [cliEntry, ...cmdParts, ...extraArgs, "--data-dir", dataDir];
 
+  // cwd 设为工作区根目录，确保 auto_detect_repos() 扫描用户项目而非扩展目录
   return {
     args,
-    cwd: extensionDir,
-    env: {},  // 不再需要 PYTHONPATH — main.py 自己处理 sys.path
+    cwd: workspaceRoot,
+    env: {},
   };
 }
 
