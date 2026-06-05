@@ -12,6 +12,8 @@ venv/
 node_modules/
 *.vsix
 vscode-extension/out/
+vscode-extension/cli/
+vscode-extension/templates/
 
 # IDE
 .vscode/

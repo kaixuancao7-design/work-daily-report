@@ -3,3 +3,6 @@ node_modules/**
 src/**
 tsconfig.json
 .gitignore
+cli/__pycache__/**
+templates/__pycache__/**
+**/*.pyc

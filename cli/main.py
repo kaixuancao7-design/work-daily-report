@@ -10,11 +10,19 @@
 
 import json
 import sys
+from pathlib import Path
 
 # 修复 Windows 终端编码问题，确保中文和 emoji 正常输出
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore
+
+# 确保 cli 包可以被导入：将 cli/ 的父目录加入 sys.path
+# 这样无论从哪个目录运行 main.py（开发模式 or VSIX 安装模式），
+# from cli.models import ... 都能正常工作
+_cli_parent = str(Path(__file__).resolve().parent.parent)
+if _cli_parent not in sys.path:
+    sys.path.insert(0, _cli_parent)
 
 from datetime import date, timedelta
 from pathlib import Path

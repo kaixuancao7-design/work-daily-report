@@ -34,29 +34,15 @@ function getWorkspaceRoot(): string {
 }
 
 /**
- * 查找项目根目录（包含 cli/main.py 和 data/ 的目录）。
+ * 查找扩展自身的安装目录（包含 cli/main.py 和 templates/ 的目录）。
  *
- * 策略：
- *   1. 先按工作区根目录查（用户把 work-daily-report/ 当作工作区）
- *   2. 再按扩展自身位置倒推（用户把 vscode-extension/ 当作工作区）
- *      __dirname 在运行时是 vscode-extension/out/，上溯两级即项目根
+ * 扩展打包时会把 cli/ 和 templates/ 复制到扩展根目录下，
+ * 因此优先使用扩展自带的 Python 脚本，而非依赖工作区。
+ *
+ * __dirname 在运行时是 <extension>/out/，上溯一级即扩展根目录。
  */
-function findProjectRoot(): string {
-  const workspaceRoot = getWorkspaceRoot();
-
-  // 策略 1：工作区根目录下是否有 cli/main.py
-  if (fs.existsSync(path.join(workspaceRoot, "cli", "main.py"))) {
-    return workspaceRoot;
-  }
-
-  // 策略 2：扩展自身位置倒推（out/ → vscode-extension/ → project-root）
-  const fromExtension = path.resolve(__dirname, "..", "..");
-  if (fs.existsSync(path.join(fromExtension, "cli", "main.py"))) {
-    return fromExtension;
-  }
-
-  // 兜底：返回工作区根目录，让用户看到明确的 "文件不存在" 错误
-  return workspaceRoot;
+function getExtensionDir(): string {
+  return path.resolve(__dirname, "..");
 }
 
 function getConfig() {
@@ -72,27 +58,31 @@ function getConfig() {
 function getPythonCliArgs(
   subcommand: string,
   extraArgs: string[] = []
-): { args: string[]; cwd: string } {
+): { args: string[]; cwd: string; env: Record<string, string> } {
   const config = getConfig();
-  const projectRoot = findProjectRoot();
-  const dataDir = config.dataDir || path.join(projectRoot, "data");
-  const cliEntry = path.join(projectRoot, "cli", "main.py");
+  const extensionDir = getExtensionDir();
+  const cliEntry = path.join(extensionDir, "cli", "main.py");
+
+  // 数据目录：优先用户配置，否则用工作区下的 .daily-report-data/
+  const workspaceRoot = getWorkspaceRoot();
+  const dataDir = config.dataDir || path.join(workspaceRoot, ".daily-report-data");
 
   // 构建参数: main.py <command> <extraArgs> --data-dir <dir>
-  // --data-dir 必须在子命令之后，否则 Click 无法识别
   const cmdParts = subcommand.split(" ");
   const args = [cliEntry, ...cmdParts, ...extraArgs, "--data-dir", dataDir];
 
   return {
     args,
-    cwd: projectRoot,
+    cwd: extensionDir,
+    env: {},  // 不再需要 PYTHONPATH — main.py 自己处理 sys.path
   };
 }
 
 async function runPythonCli(
   args: string[],
   cwd: string,
-  asJson: boolean = false
+  asJson: boolean = false,
+  extraEnv: Record<string, string> = {}
 ): Promise<string> {
   const config = getConfig();
   const pythonCmd = config.pythonCommand;
@@ -102,6 +92,7 @@ async function runPythonCli(
       cwd,
       shell: true,
       stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, ...extraEnv },
     });
 
     let stdout = "";
@@ -138,12 +129,12 @@ async function runVscodeCommand(
   extraArgs: string[] = [],
   asJson: boolean = false
 ): Promise<VscodeTodayResult | null> {
-  const { args, cwd } = getPythonCliArgs(`vscode ${subcommand}`, [
+  const { args, cwd, env } = getPythonCliArgs(`vscode ${subcommand}`, [
     ...(asJson ? ["--json"] : []),
     ...extraArgs,
   ]);
 
-  const output = await runPythonCli(args, cwd, asJson);
+  const output = await runPythonCli(args, cwd, asJson, env);
   if (!output) return null;
 
   if (asJson) {
@@ -365,9 +356,9 @@ class HistoryTreeDataProvider
 }
 
 async function buildHistoryTreeNodes(): Promise<HistoryTreeNode[]> {
-  const { args, cwd } = getPythonCliArgs("vscode --history-tree", []);
+  const { args, cwd, env } = getPythonCliArgs("vscode --history-tree", []);
   try {
-    const output = await runPythonCli(args, cwd);
+    const output = await runPythonCli(args, cwd, false, env);
     const data = JSON.parse(output);
     if (data.status !== "ok" || !data.years) {
       return [{ type: "empty", label: "暂无历史日报" }];
@@ -399,11 +390,11 @@ async function buildHistoryTreeNodes(): Promise<HistoryTreeNode[]> {
 async function handleViewHistoryReport(node: HistoryTreeNode) {
   if (!node.date) return;
 
-  const { args, cwd } = getPythonCliArgs("vscode", [
+  const { args, cwd, env } = getPythonCliArgs("vscode", [
     "--report", node.date,
   ]);
   try {
-    const content = await runPythonCli(args, cwd);
+    const content = await runPythonCli(args, cwd, false, env);
     if (content) {
       const panel = vscode.window.createWebviewPanel(
         "dailyReportHistory",
@@ -529,7 +520,7 @@ async function handleGenerateToday() {
       : config.templateFormat === "dingtalk" ? "daily-dingtalk.md.j2"
       : "daily.md.j2"]
     : [];
-  const { args, cwd } = getPythonCliArgs("generate today", [
+  const { args, cwd, env } = getPythonCliArgs("generate today", [
     "--no-manual",
     "--output", "stdout",
     ...templateArgs,
@@ -543,7 +534,7 @@ async function handleGenerateToday() {
     },
     async (progress) => {
       try {
-        const content = await runPythonCli(args, cwd);
+        const content = await runPythonCli(args, cwd, false, env);
         if (content) {
           await outputReport(content, "今日日报");
         } else {
@@ -559,7 +550,7 @@ async function handleGenerateToday() {
 }
 
 async function handleGenerateWeek() {
-  const { args, cwd } = getPythonCliArgs("generate week", [
+  const { args, cwd, env } = getPythonCliArgs("generate week", [
     "--output",
     "stdout",
   ]);
@@ -572,7 +563,7 @@ async function handleGenerateWeek() {
     },
     async (progress) => {
       try {
-        const content = await runPythonCli(args, cwd);
+        const content = await runPythonCli(args, cwd, false, env);
         if (content) {
           await outputReport(content, "本周周报");
         }
@@ -590,7 +581,7 @@ async function handleInsertAtCursor() {
     return;
   }
 
-  const { args, cwd } = getPythonCliArgs("generate today", [
+  const { args, cwd, env } = getPythonCliArgs("generate today", [
     "--no-manual",
     "--output",
     "stdout",
@@ -604,7 +595,7 @@ async function handleInsertAtCursor() {
     },
     async (progress) => {
       try {
-        const content = await runPythonCli(args, cwd);
+        const content = await runPythonCli(args, cwd, false, env);
         if (content) {
           await editor.edit((editBuilder) => {
             editBuilder.insert(editor.selection.active, content);
@@ -639,7 +630,7 @@ async function handleAddManualEntry() {
   const today = new Date();
   const dateStr = today.toISOString().split("T")[0];
 
-  const { args, cwd } = getPythonCliArgs(`edit ${dateStr}`, ["--add"]);
+  const { args, cwd, env } = getPythonCliArgs(`edit ${dateStr}`, ["--add"]);
 
   // 需要通过 stdin 输入内容，然后发送空行结束
   try {
@@ -648,6 +639,7 @@ async function handleAddManualEntry() {
       cwd,
       shell: true,
       stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, ...env },
     });
 
     proc.stdin?.write(content + "\n\n");
@@ -692,13 +684,13 @@ async function handlePreviewToday() {
     },
     async (progress) => {
       try {
-        const { args, cwd } = getPythonCliArgs("generate", [
+        const { args, cwd, env } = getPythonCliArgs("generate", [
           "today",
           "--no-manual",
           "--output",
           "stdout",
         ]);
-        const content = await runPythonCli(args, cwd);
+        const content = await runPythonCli(args, cwd, false, env);
         if (content) {
           panel.webview.html = renderMarkdownAsHtml(content);
         } else {
@@ -770,7 +762,7 @@ function renderMarkdownAsHtml(markdown: string): string {
 async function handleExport() {
   const config = getConfig();
   const format = config.templateFormat || "markdown";
-  const { args, cwd } = getPythonCliArgs("export today", [
+  const { args, cwd, env } = getPythonCliArgs("export today", [
     "--format", format,
     "--output", "stdout",
   ]);
@@ -783,7 +775,7 @@ async function handleExport() {
     },
     async (progress) => {
       try {
-        const content = await runPythonCli(args, cwd);
+        const content = await runPythonCli(args, cwd, false, env);
         if (content) {
           await outputReport(content, "日报导出");
         }
@@ -802,9 +794,9 @@ class SchedulerService {
   private intervalId: NodeJS.Timeout | null = null;
 
   async runCatchup() {
-    const { args, cwd } = getPythonCliArgs("vscode --catchup", []);
+    const { args, cwd, env } = getPythonCliArgs("vscode --catchup", []);
     try {
-      const output = await runPythonCli(args, cwd);
+      const output = await runPythonCli(args, cwd, false, env);
       const result = JSON.parse(output);
       if (result.status === "ok") {
         const dailyCount = (result.daily_generated as string[]).length;

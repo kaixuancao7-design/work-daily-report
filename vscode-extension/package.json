@@ -193,10 +193,11 @@
     "url": "https://github.com/kaixuancao/work-daily-report"
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run compile && npm run copy-python",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "echo 'no linter configured'",
+    "copy-python": "node -e \"var fs=require('fs'),p=require('path');function c(s,d){if(fs.existsSync(d))fs.rmSync(d,{recursive:true});fs.cpSync(s,d,{recursive:true})};c('../cli','./cli');c('../templates','./templates')\"",
     "package": "vsce package"
   },
   "devDependencies": {
