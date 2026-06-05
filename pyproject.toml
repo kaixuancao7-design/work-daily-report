@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daily-report"
-version = "0.2.0"
+version = "0.2.1"
 description = "基于 Git 提交记录自动生成工作日报/周报的 CLI 工具 —— 支持多仓库扫描、LLM 智能总结、多平台模板导出、VSCode 扩展、定时调度与断点追赶"
 readme = "README.md"
 requires-python = ">=3.10"

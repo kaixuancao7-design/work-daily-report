@@ -150,7 +150,7 @@ def _output_report(text: str, output: str = "stdout"):
 # ─── CLI 主组 ─────────────────────────────────────
 
 @click.group()
-@click.version_option(version="0.1.0", message="daily-report v%(version)s")
+@click.version_option(version="0.2.1", message="daily-report v%(version)s")
 def cli():
     """工作日报工具 - 基于 Git 提交记录自动生成日报 / 周报"""
 
