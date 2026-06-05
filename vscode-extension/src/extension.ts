@@ -111,6 +111,16 @@ async function runPythonCli(
     });
 
     proc.on("close", (code) => {
+      // 始终将 stderr 诊断信息输出到 VSCode 输出频道
+      if (stderr) {
+        try {
+          const channel = getOutputChannel();
+          channel.appendLine(stderr.trim());
+        } catch {
+          // 输出频道可能尚未初始化，忽略
+        }
+      }
+
       if (code !== 0) {
         // 检查是否因为用户取消（如 Ctrl+C）
         if (code === 1 && !stderr && !stdout) {
@@ -156,7 +166,9 @@ function getOutputChannel(): vscode.OutputChannel {
 
 async function showInOutputPanel(content: string) {
   const channel = getOutputChannel();
-  channel.clear();
+  // 不 clear，追加模式——保留 CLI 的诊断信息（如扫描结果、提交数等）
+  channel.appendLine("");
+  channel.appendLine("─".repeat(50));
   channel.appendLine(content);
   channel.show(true);
 }
@@ -514,6 +526,11 @@ async function refreshTreeView() {
 // ─── 命令处理器 ───────────────────────────────────
 
 async function handleGenerateToday() {
+  const channel = getOutputChannel();
+  channel.clear();
+  channel.appendLine("⏳ 正在生成今日日报...");
+  channel.show(true);
+
   const config = getConfig();
   const templateArgs = config.templateFormat !== "default"
     ? ["--template", config.templateFormat === "feishu" ? "daily-feishu.md.j2"
@@ -550,6 +567,11 @@ async function handleGenerateToday() {
 }
 
 async function handleGenerateWeek() {
+  const channel = getOutputChannel();
+  channel.clear();
+  channel.appendLine("⏳ 正在生成本周周报...");
+  channel.show(true);
+
   const { args, cwd, env } = getPythonCliArgs("generate week", [
     "--output",
     "stdout",

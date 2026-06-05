@@ -25,7 +25,7 @@ vscode-extension/templates/
 # Data (日报数据用户本地保留，不提交到仓库)
 data/daily-reports/
 data/config.json
-
+.daily-report-data/
 # OS
 .DS_Store
 Thumbs.db
